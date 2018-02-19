@@ -1,0 +1,102 @@
+Journey to the Center of the Containers
+What happens on my box when a container is started?
+10 Mar 2018
+Tags: containers,kubernetes,CRI,docker
+
+Francesco Romani
+Senior Software Engineer, Red Hat
+fromani {gmail,redhat}
+http://github.com/{mojaves,fromanirh}
+
+* whoami
+- sweng @Red Hat: oVirt, libvirt, kvm
+- works daily(-ish): python, C
+- interested in: golang, containers, kubernetes
+- happy linux user
+- geek
+- started with a US robotics V.90 modem
+- not-so-great at drawing (just wait a few slides)
+
+* goal
+Understand the steps that brings a container to life
+
+A *LOT* of questions along the way
+- runtime?
+- CRI?
+- Pods?
+- CNI?
+- cgroups?
+- namespaces?
+- seccomp?
+- much more...
+
+buzzword bingo?
+
+* There and Back Again
+{hand-drawn map}
+
+* The Passage of the Marshes
+- let's follow a trail: the kubernetes CRI api
+- kube concepts are de facto more generic/reusable
+- docker is a silo
+- mapping to docker concepts is simple
+
+* So, what is a container?
+What we commonly call a container is
+- a set of the features of the linux kernel we use 
+- to (re)create a controlled process
+- to run a well-known image
+
+* A recipe for containers
+The basic building blocks:
+- namespaces: process isolation
+- cgroups: resource limits
+
+So nice to have that everyone uses them:
+- seccomp: limit syscall usage
+- SELinux: mandatory access control
+
+Add freely:
+- linux capabilities: finer-grained privileges
+
+* What about pods?
+A pod is a group of containers run in a shared context
+(A pod with exactly one container is perfectly fine!)
+
+The minimum schedulable entity for kubernetes
+
+Nicely composable with containers (with what we commonly mean with "containers")
+
+We want to distinguish to understand some key concepts later on.
+
+.link https://kubernetes.io/docs/concepts/workloads/pods/pod/ Would you like to know more? 
+
+* sandboxes
+- namespaces
+- seccomp
+- selinux
+
+* namespaces
+- unshare
+
+* the pivot: net namespaces
+
+* the pause container
+
+* And now something different: the network setup
+- CNI
+
+* CNI plugins
+
+* CNI proto
+
+* CNI steps
+
+* Containers in a pod
+
+???
+
+* wrap-up/takeaways
+
+* Q? A!
+
