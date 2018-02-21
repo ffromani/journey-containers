@@ -17,10 +17,10 @@ http://github.com/{mojaves,fromanirh}
 - started with a US robotics V.90 modem
 - not-so-great at drawing (just wait a few slides)
 
-* goal
+* Goal of this Talk
 Understand the steps that brings a container to life
 
-A *LOT* of questions along the way
+A *LOT* of Questions Along the Way
 - runtime?
 - CRI?
 - Pods?
@@ -43,7 +43,7 @@ buzzword bingo?
 
 * So, what is a container?
 What we commonly call a container is
-- a set of the features of the linux kernel we use 
+- a set of the features of the linux kernel we use
 - to (re)create a controlled process
 - to run a well-known image
 
@@ -69,19 +69,135 @@ Nicely composable with containers (with what we commonly mean with "containers")
 
 We want to distinguish to understand some key concepts later on.
 
-.link https://kubernetes.io/docs/concepts/workloads/pods/pod/ Would you like to know more? 
+.link https://kubernetes.io/docs/concepts/workloads/pods/pod/ Would you like to know more?
 
-* sandboxes
-- namespaces
-- seccomp
-- selinux
+* The Building Blocks, Revisited
 
-* namespaces
-- unshare
+* Namespaces: Intro
 
-* the pivot: net namespaces
+Inception: ~2002; major developments ~2006 and onwards.
 
-* the pause container
+A namespace...
+
+  wraps a global system resource in an abstraction that makes it appear to the processes
+  within the namespace that they have their own isolated instance of the global resource.
+  [...]
+  One use of namespaces is to implement containers.
+
+Namespaces are _ephemeral_ by default: they are tied to the lifetime of a process.
+Once that process is gone, so is the namespace.
+
+But we can improve this (more on later).
+
+.link http://man7.org/linux/man-pages/man7/namespaces.7.html more documentation
+
+* Namespaces: API
+
+A *Kernel* API, syscalls:
+
+- unshare(2): move calling process in new namespace(s) - and more.
+- setns(2): make the calling process join existing namespace(s)
+- clone(2): create a new process, optionally joining a new namespace - and *much* more.
+
+* Namespaces: what we can unshare?
+
+- cgroup: cgroup root directory (more on that later)
+- ipc: System V IPC, POSIX message queues
+- network: network devices, stacks, ports, etc.
+- mount: mount points
+- pid: process id hierarchy
+- user: user and group IDs
+- uts: hostname and NIS domain name
+
+.link http://man7.org/linux/man-pages/man7/namespaces.7.html more documentation
+
+* Namespaces: /procfs goodies
+
+  Each process has a /proc/$PID/ns/ subdirectory containing one entry
+  for each namespace that supports being manipulated by setns(2)
+
+Actually, the setns(2) syscall accepts a _file_ _descriptor_ as parameter.
+Everything is a file!
+
+  Bind mounting (see mount(2)) one of the files in this directory to
+  somewhere else in the filesystem keeps the corresponding namespace of
+  the process specified by pid alive even if all processes currently in
+  the namespace terminate.
+
+So we can make one namespace outlive a process
+
+.link http://man7.org/linux/man-pages/man7/namespaces.7.html more documentation
+
+* Namespaces DIY: unshare
+
+  ///samurai7/~># echo $$
+  5184
+  ///samurai7/~># unshare --net --fork --pid --mount-proc bash
+  ///samurai7/~># echo $$
+  1
+  ///samurai7/~># ifconfig
+  ///samurai7/~>#
+
+  ///samurai7/~># ls -lh /proc/{1,5184,5282}/ns/pid
+  lrwxrwxrwx. 1 root root 0 Feb 21 19:54 /proc/1/ns/pid -> pid:[4026531836]
+  lrwxrwxrwx. 1 root root 0 Feb 21 19:53 /proc/5184/ns/pid -> pid:[4026531836]
+  lrwxrwxrwx. 1 root root 0 Feb 21 19:54 /proc/5282/ns/pid -> pid:[4026532544]
+
+* Namespaces DIY: nsenter
+
+  ///samurai7/~># nsenter -a -t 5282 /bin/sh
+  sh-4.4# ps -fauxw
+  USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+  root        32  0.0  0.0 122680  3864 pts/4    S    20:00   0:00 /bin/sh
+  root        33  0.0  0.0 149756  3700 pts/4    R+   20:00   0:00  \_ ps -fauxw
+  root         1  0.0  0.0 123884  5108 pts/2    S+   19:53   0:00 bash
+  sh-4.4# echo $$
+  32
+
+* Namespaces DIY: ip
+
+* Namespaces: wrap up
+
+Namespaces allow us to have separate instances of system resources.
+
+*system resources are shared*
+
+* cgroups: intro
+
+Inception: ~2007.
+
+Linux *C* ontrol *Groups*: allow process to be organized in hierarical groups to
+do limiting and accounting of certain system resources.
+
+Most notably, memory and CPU time (and more: block I/O, pids...)
+
+Powerful and easy-as-possible resource control mechanism
+
+* cgroups: API
+
+* seccomp
+
+Inception: ~2005
+
+* SELinux
+
+Inception: ~1998
+
+* capabilities
+
+Inception: ~1998
+
+* We have the tools, let's build something
+
+* Kubernetes
+
+* Kubelet
+
+* The CRI API
+
+* Let's get this process started
+
+* The pause container
 
 * And now something different: the network setup
 - CNI
