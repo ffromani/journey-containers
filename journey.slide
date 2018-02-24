@@ -9,28 +9,29 @@ fromani {gmail,redhat}
 http://github.com/{mojaves,fromanirh}
 
 * whoami
-- sweng @Red Hat: oVirt, libvirt, kvm
-- works daily(-ish): python, C
+- sweng @ Red Hat: opinions and mistakes are my own!
+- works daily(-ish): oVirt, libvirt, kvm, python, C
 - interested in: golang, containers, kubernetes
-- happy linux user
-- geek
-- started with a US robotics V.90 modem
+- happy linux user (red hat linux, debian, ubuntu, fedora)
+- geek 
 - not-so-great at drawing (just wait a few slides)
 
 * Goal of this Talk
+
+Focus on container runtime: the "how" not the "what"
+
 Understand the steps that brings a container to life
 
-A *LOT* of Questions Along the Way
-- runtime?
-- CRI?
-- Pods?
-- CNI?
-- cgroups?
-- namespaces?
-- seccomp?
-- much more...
+- What a container runtime does do?
+- What is a container runtime, actually?
 
-buzzword bingo?
+* NON-Goals of this Talk:
+
+We will *not* talk about:
+
+- container images (tags, layers...)
+- how to build images: assume pre-built image
+- how to store and fetch images: assume image on local file system
 
 * There and Back Again
 {hand-drawn map}
@@ -46,6 +47,20 @@ What we commonly call a container is
 - a set of the features of the linux kernel we use
 - to (re)create a controlled process
 - to run a well-known image
+
+* And what is a container runtime?
+Any tool, or set of tools which can run _container_ _image_
+
+Examples:
+- crio
+- containerd
+- rkt (same notes about docker)
+
+Some well known names:
+
+- *Docker* *is* a container runtime, but it is also much more
+- *Kubernetes* is a management platform, requires a container runtime
+- *runC* bare-bones container runtime (you most often want to augment it)
 
 * A recipe for containers
 The basic building blocks:
@@ -168,7 +183,7 @@ Let's create a new network namespace `cnt`
   ///samurai7/~># ip netns add cnt
   ///samurai7/~># ip netns list
   cnt
-  ///samurai7/~># ls -lh /var/run/netns/cnt 
+  ///samurai7/~># ls -lh /var/run/netns/cnt
   -r--r--r--. 1 root root 0 Feb 23 19:15 /var/run/netns/cnt
 
 And we connect it to the outside:
@@ -241,7 +256,7 @@ Or just let your management engine do that for you:
 
 Mostly, you don't want to do it :)
 
-.image https://imgs.xkcd.com/comics/automation.png 
+.image https://imgs.xkcd.com/comics/automation.png
 
 Seriously, the management tool (whatever it is) almost always Just Works (tm) and
 it is simpler to tune.
@@ -322,11 +337,130 @@ Again, most often just use the profiles your distribution/management engine prov
 
 * Kubernetes
 
+  Kubernetes is an open-source system for automating deployment,
+  scaling, and management of containerized applications.
+
+.link https://kubernetes.io/ source
+
+Used to require Docker to actually run containers
+
+.link http://blog.kubernetes.io/2016/12/container-runtime-interface-cri-in-kubernetes.html Became runtime-agnostic since version 1.5
+
 * Kubelet
+
+Node-agent of kubernetes: runs on every worker node of your cluster
+
+Makes sure that containers described by POD specifications are running and healthy
+
+See few slides before for the definition of POD and Container
+
+.link https://kubernetes.io/docs/reference/generated/kubelet/ more documentation
 
 * The CRI API
 
-* Let's get this process started
+Introduced in Kubernetes 1.5
+
+TODO: redo image
+
+.image https://github.com/containerd/cri-containerd/raw/master/docs/cri-containerd.png _ 800
+
+Took some time to really have valid alternatives
+
+Plugin interface which enables kubelet to use different container runtimes
+
+Previously, to use a different runtime (e.g. not docker), patches to kubelet were needed.
+
+* Noteworthy CRI-compliant runtimes
+
+.link https://github.com/kubernetes-incubator/cri-o cri-o: OCI Kubernetes Container Runtime daemon
+
+.link https://github.com/kubernetes-incubator/rktlet rtklet: rkt-based implementation of Kubernetes CRI
+
+.link https://github.com/containerd/cri-containerd cri-containerd: containerd-based implementation of Kubernetes CRI.
+
+.link https://github.com/kubernetes/frakti frakti: lets Kubernetes run pods and containers directly inside hypervisors via runV
+
+* Let's get this process started (1/2)
+
+.link https://github.com/kubernetes-incubator/cri-tools crictl: CRI command line interface
+
+- command line is concise, easy to paste in the slides :)
+- simple enough to not get in the way
+- 1:1 mapping to protocol
+
+crictl configuration (/etc/crictl.yaml): specify the UNIX domain socket to use to connect to the CRI runtime
+
+obviously, each runtime uses a different path :(
+
+* Let's get this process started (2/2)
+
+CRI compliant runtime: anything is fine. We pick cri-containerd because has a nice bundle of
+crictl, configuration file and runtime
+
+WARNING: be careful to pick the right version of crictl and CRI runtime
+
+* The CRI interface API
+
+.link https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/cri/runtime/v1alpha2/api.proto from the protocol spec:
+
+  service RuntimeService {
+    // Sandbox operations.
+    rpc RunPodSandbox(RunPodSandboxRequest) returns (RunPodSandboxResponse) {}
+    rpc PodSandboxStatus(PodSandboxStatusRequest) returns (PodSandboxStatusResponse) {}
+    rpc ListPodSandbox(ListPodSandboxRequest) returns (ListPodSandboxResponse) {}
+    ...
+    // Container operations.
+    rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
+    rpc StartContainer(StartContainerRequest) returns (StartContainerResponse) {}
+    rpc ListContainers(ListContainersRequest) returns (ListContainersResponse) {}
+    rpc ContainerStatus(ContainerStatusRequest) returns (ContainerStatusResponse) {}
+    ...
+  }
+
+* Create workflow (aka: what to expect next)
+
+- define a "sandbox" (in CRI jargon) using a JSON spec
+- create and "run" it -> *RuntimeService.RunPodSandBox*
+- define containers again using a JSON spec -> *RuntimeService.CreateContainer*
+- create container(s) in the sandbox -> *RuntimeService.StartContainer*
+
+* Sandbox bootstrap
+
+create and run
+
+  # cat sandbox-config.json
+  {
+    "metadata": {
+        "name": "test-sandbox",
+        "namespace": "default",
+        "attempt": 1,
+        "uid": "hdishd83djaidwnduwk28bcsb"
+    },
+    "linux": {
+    }
+  }
+  # crictl create sandbox-config.json
+  # crictl runs sandbox-config.json
+
+inspect:
+
+  # crictl sandboxes
+  SANDBOX ID          CREATED             STATE               NAME                NAMESPACE           ATTEMPT
+  959fcb9d9207a       3 minutes ago       SANDBOX_READY       test-sandbox        default             1
+
+* Sandbox: what's in there?
+
+  USER       PID %CPU %MEM    VSZ   RSS COMMAND
+  root      1436  0.0  0.3 854920 27176 /usr/local/bin/containerd
+  root      1823  0.0  0.0   8928  4184  \_ containerd-shim -namespace k8s.io ...
+  root      1839  0.0  0.0   1028     4      \_ /pause
+  root      1446  0.0  0.2 398328 22364 /usr/local/bin/cri-containerd ...
+
+Uhm, pause?
+
+Step back for a sec.
+
+* What is a sandbox, by the way?
 
 * The pause container
 
@@ -344,6 +478,16 @@ Again, most often just use the profiles your distribution/management engine prov
 ???
 
 * wrap-up/takeaways
+
+- a container is the execution of a given _image_
+
+- under the hood containers are agglomerates of cooperating features of the Linux Kernel
+
+- many of those features are quite old, and only recently they started to be integrated
+
+- lot of moving parts, *and* the environment is still evolving and changing
+
+- interoperability is improving (also thanks to kubernetes and CRI?)
 
 * Q? A!
 
