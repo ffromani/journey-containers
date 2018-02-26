@@ -636,9 +636,147 @@ Did it worked? Let's try.
 
 Yep, it worked! Back to sandboxes.
 
-* Our containers, at last
+* At last, containers
 
-* ???
+* The container spec
+
+A bare bones container spec
+
+  # cat container-config.json
+  {
+    "metadata": {
+        "name": "busybox"
+    },
+    "image":{
+        "image": "busybox"
+    },
+    "command": [
+        "top"
+    ],
+    "linux": {
+    }
+  }
+
+Will be consumed by `runc` - see next slides
+
+* container ready to takeoff
+
+Let's run our container in the sandbox we created - yep, we must feed the sandbox-config again
+
+  # crictl create 959fcb9d9207a container-config.json sandbox-config.json
+  54b8f3e3ea8ab70b966c0ac6b60b415eb14305f92f80b2fad015b22a0ecff836
+
+Created, but not started!
+
+  # crictl ps
+  CONTAINER ID        IMAGE               CREATED             STATE               NAME                ATTEMPT
+  # crictl ps -a
+  CONTAINER ID        IMAGE               CREATED             STATE               NAME                ATTEMPT
+  54b8f3e3ea8ab       busybox             15 seconds ago      CONTAINER_CREATED   busybox             0
+
+Starting:
+
+  crictl start 54b8f3e3ea8ab
+
+* container run!
+
+  USER       PID %CPU %MEM    VSZ   RSS COMMAND
+  root      1436  0.0  0.3 854920 27176 /usr/local/bin/containerd
+  root      1823  0.0  0.0   8928  4184  \_ containerd-shim -namespace k8s.io ...
+  root      1839  0.0  0.0   1028     4      \_ /pause
+  root      2813  0.0  0.0   7520  4308  \_ containerd-shim -namespace k8s.io ...
+  root      2829  0.0  0.0   1240     4       \_ top
+  root      1446  0.0  0.2 398328 22364 /usr/local/bin/cri-containerd ...
+
+* container sharing is container caring
+
+Let's check how the namespace are set
+
+   cgroup -> cgroup:[4026531835]
+   ipc -> ipc:[4026532380]
+   -mnt -> mnt:[4026532378]
+   +mnt -> mnt:[4026532382]
+   net -> net:[4026532299]
+   -pid -> pid:[4026532381]
+   -pid_for_children -> pid:[4026532381]
+   +pid -> pid:[4026532383]
+   +pid_for_children -> pid:[4026532383]
+   user -> user:[4026531837]
+   uts -> uts:[4026532379]
+
+Containers share all namespaces but `mnt` and `pid*`
+
+Looks good. How did we do that?
+
+* meet runC
+
+runC is the de facto standard to run containers
+many management engines (e.g. containerd) use the runC cli interface as ABI
+you can use any tool that implements the same CLI - but why bother? :\
+
+originated by Docker in the ~2014, now standalone project
+
+Includes a command line tool `runc` and a package `libcontainer` to run containers (surprise!)
+
+* how runC works (1/3)
+
+In a nutshell, it uses the building blocks we introduced before
+
+- containers defined by a spec (JSON document)
+- spec is pretty detailed (selinux, seccomp, capabilites, apparmor...)
+- assumes to be run in the root of a `bundle`
+- management engines like containerd takes care of setting everything (config files, directories) and then spawns runc
+- by default, leverages systemd for cgroups managemnt
+
+* how runC works (2/3)
+
+serverless: it spawns the container, actually the executable that was requested to run, and exits
+
+supervisor-less: you can use systemd directly (but most likely you shouldn't - lot of stuff to take care of) use a management tool instead!
+
+stateless: everything stored under /run
+
+* how runC works (3/3)
+
+Starting a container is actually surprisingly hard
+
+.link https://www.weave.works/blog/linux-namespaces-and-go-don-t-mix because linux namespaces and go don't mix
+
+runC solves lots of complexity and pitfalls
+
+more than enough for another talk on this topic only.
+
+* some noteworthy pitfalls
+
+Let's just highlight the deadliest traps
+
+the golang runtime multiplexes goroutines on threads
+
+threads can be spawned any time
+
+so it is unsafe to use setns(2) in go code: the goroutine environment can be corrupted without warning
+
+.link https://github.com/golang/go/issues/20676 it is a known issue
+
+.link https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion fork()ing in go code is not safe either
+
+* black magic
+
+runC does its job with a complex dance featuring:
+
+a two-stage fork
+
+calling itself while starting a container
+
+.link https://github.com/opencontainers/runc/blob/master/libcontainer/nsenter/README.md using helper code in C to be called before the golang runtime starts.
+
+* But in the end
+
+It just works :)
+
+
+  docker run redis
+
 
 * wrap-up/takeaways
 
@@ -653,6 +791,8 @@ Yep, it worked! Back to sandboxes.
 - lot of moving parts, *and* the environment is still evolving and changing
 
 - interoperability is improving (also thanks to kubernetes and CRI?)
+
+- a lot of integrated tools: you can plug in at pretty much ever layer
 
 * Q? A!
 
