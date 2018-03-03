@@ -1,0 +1,416 @@
+Journey to the Center of the Containers
+What happens on my box when a container is started?
+10 Mar 2018
+Tags: containers,kubernetes,CRI,docker
+
+Francesco Romani
+Senior Software Engineer, Red Hat
+fromani {gmail,redhat}
+http://github.com/{mojaves,fromanirh}
+
+* whoami
+- sweng @ Red Hat: opinions and mistakes are my own!
+- works daily(-ish): oVirt, libvirt, kvm, python, C
+- interested in: golang, containers, kubernetes
+- happy linux user (red hat linux, debian, ubuntu, fedora)
+- geek
+- not-so-great at drawing (just wait a few slides)
+
+* What to expect from this Talk?
+
+Goal: understand the steps that brings a container to life
+- What a container runtime does do?
+- What is a container runtime, actually?
+
+NON-Goals of this Talk:
+- container images (tags, layers...)
+- how to build images: assume pre-built image
+- how to store and fetch images: assume image on local file system
+
+* Talk outline
+
+- part 1: intro & dramatis persona (you are here now!)
+
+- part 2: the building blocks of a container
+
+- part 3: how containers are built
+
+*STANDARD* *DISCLAIMER*
+I'm not a Kubernetes guru - mistakes may happen!
+Please let me know of any error you may find!
+
+* So, what is a container?
+What we commonly call a container is
+- a set of the features of the linux kernel we use
+- to (re)create a controlled process
+- to run a well-known image
+
+* And what is a container runtime?
+
+Any tool, or set of tools which can run _container_ _image_
+
+Some well known names:
+
+- *Docker* *is* a container runtime, but it is also much more
+- *Kubernetes* is a management platform, requires a container runtime
+- *runC* bare-bones container runtime (you most often want to augment it)
+
+* the building blocks of a container
+
+* Ingredients to bake containers
+
+- namespaces: process isolation
+- cgroups: resource limits
+- seccomp: limit syscall usage
+- SELinux: mandatory access control
+- linux capabilities: finer-grained privileges
+
+* Namespaces
+
+Inception: ~2002; major developments ~2006 and onwards.
+
+A namespace...
+
+  wraps a global system resource in an abstraction that makes it appear to the processes
+  within the namespace that they have their own isolated instance of the global resource.
+  [...]
+  One use of namespaces is to implement containers.
+
+Namespaces are tied to the lifetime of a process.
+
+Relevant syscalls:
+
+- unshare(2): move calling process in new namespace(s) - and more.
+- setns(2): make the calling process join existing namespace(s)
+- clone(2): create a new process, optionally joining a new namespace - and *much* more.
+
+* cgroups
+
+Inception: ~2007. Major update: ~2013
+
+Linux *C* ontrol *Groups*: allow process to be organized in hierarical groups to
+do limiting and accounting of certain system resources.
+
+Most notably, memory and CPU time (and more: block I/O, pids...)
+
+CGroups provide resource `limit` and `accounting`
+
+Powerful and easy-as-possible resource control mechanism
+
+But still quite complex to manage
+
+* cgroups: what can we control?
+
+- blkio: limits on input/output access to and from devices
+- cpu: uses the scheduler to provide cgroup tasks access to the CPU
+- cpuacct: automatic reports on CPU resources used by tasks
+- cpuset: assigns individual CPUs and memory nodes to tasks
+- memory: sets limits on memory and reports on memory resources
+- perf_event: performance analysis.
+
+Specific Linux Distribution (e.g. RHEL) may offer more cgroups.
+
+Add your own!
+
+* seccomp
+
+Inception: ~2005; Major update ~2012
+
+Operational modes:
+
+- 0 disabled
+- 1 for strict: only _four_ system calls: read, write, exit, sigreturn
+- 2 for filter: allow developers to write filters to determine if a given syscall can run
+
+You can add your own syscall filters using *BPF* language (!!!)
+
+* SELinux
+
+Inception: ~1998
+
+Adds Mandatory Access Control (MAC) and Role Based Access Control (RBAC) to the linux kernel
+
+Linux, being UNIX-Like, previously supported only Discretionary Access Control
+Mostly used on CentOS, Fedora, RHEL, RHEL-derived distributions
+
+SELinux *used* to be *perceived* as overly complex, and overly annoying too.
+It got *EXTREMELY* better: most of time, you don't even notice it is running. Just Works (tm)
+
+If you need to troubleshoot something, `audit2why` is usally a great start
+
+.link http://selinuxproject.org/page/Main_Page Lots of documentation available
+
+* how containers are built
+
+* Kubernetes
+
+  Kubernetes is an open-source system for automating deployment,
+  scaling, and management of containerized applications.
+
+.link https://kubernetes.io/ source
+
+Used to require Docker to actually run containers
+
+.link http://blog.kubernetes.io/2016/12/container-runtime-interface-cri-in-kubernetes.html Became runtime-agnostic since version 1.5
+
+A trail to follow: the kubernetes CRI api
+- kubernetes concepts are de facto more generic/reusable
+- docker is a silo
+- mapping to docker concepts is simple
+
+* Something about pods
+A pod is a group of containers run in a shared context
+(A pod with exactly one container is perfectly fine!)
+
+The minimum schedulable entity for kubernetes
+
+Nicely composable with containers (with what we commonly mean with "containers")
+
+We want to distinguish to understand some key concepts later on.
+
+.link https://kubernetes.io/docs/concepts/workloads/pods/pod/ Would you like to know more?
+
+* Kubelet and CRI
+
+Kubelet is the node-agent of kubernetes: runs on every worker node of your cluster
+
+Makes sure that containers described by POD specifications are running and healthy
+
+CRI API: Introduced in Kubernetes 1.5
+
+.image https://github.com/containerd/cri-containerd/raw/master/docs/cri-containerd.png _ 800
+
+Plugin interface which enables kubelet to use different container runtimes
+
+* Noteworthy CRI-compliant runtimes
+
+.link https://github.com/kubernetes-incubator/cri-o cri-o: OCI Kubernetes Container Runtime daemon
+
+.link https://github.com/kubernetes-incubator/rktlet rtklet: rkt-based implementation of Kubernetes CRI
+
+.link https://github.com/containerd/cri-containerd cri-containerd: containerd-based implementation of Kubernetes CRI.
+
+.link https://github.com/kubernetes/frakti frakti: lets Kubernetes run pods and containers directly inside hypervisors via runV
+
+* The CRI interface API
+
+.link https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/cri/runtime/v1alpha2/api.proto from the protocol spec:
+
+  service RuntimeService {
+    // Sandbox operations.
+    rpc RunPodSandbox(RunPodSandboxRequest) returns (RunPodSandboxResponse) {}
+    rpc PodSandboxStatus(PodSandboxStatusRequest) returns (PodSandboxStatusResponse) {}
+    rpc ListPodSandbox(ListPodSandboxRequest) returns (ListPodSandboxResponse) {}
+    ...
+    // Container operations.
+    rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
+    rpc StartContainer(StartContainerRequest) returns (StartContainerResponse) {}
+    rpc ListContainers(ListContainersRequest) returns (ListContainersResponse) {}
+    rpc ContainerStatus(ContainerStatusRequest) returns (ContainerStatusResponse) {}
+    ...
+  }
+
+* SPOILER: how it will look like
+
+  USER       PID %CPU %MEM    VSZ   RSS COMMAND
+  root      1436  0.0  0.3 854920 27176 /usr/local/bin/containerd
+  root      1823  0.0  0.0   8928  4184  \_ containerd-shim -namespace k8s.io ...
+  root      1839  0.0  0.0   1028     4      \_ /pause
+  root      2813  0.0  0.0   7520  4308  \_ containerd-shim -namespace k8s.io ...
+  root      2829  0.0  0.0   1240     4       \_ top
+  root      1446  0.0  0.2 398328 22364 /usr/local/bin/cri-containerd ...
+
+* Create workflow (aka: what to expect next)
+
+- define a "sandbox" (in CRI jargon) using a JSON spec
+- create and "run" it -> *RuntimeService.RunPodSandBox*
+- define containers again using a JSON spec -> *RuntimeService.CreateContainer*
+- create container(s) in the sandbox -> *RuntimeService.StartContainer*
+
+* Sandbox
+
+A "sandbox" - in CRI parlance - is the environment on which  the real container are supposed to run: namespaces, cgroups, networking, everything setup and ready.
+
+But because of how the linux APIs work, we need a parent container which
+will serve as foundation for the Linux namespace sharing.
+
+That's the pause container!
+
+Shared context:
+
+- namespaces
+- cgroup setting
+- network setup (special noteworthy case of namespaces)
+- host volumes
+
+* Meet the pause container
+
+- simple as possible container - both in implementation and in resource usage
+- 68 lines of C code (counting license boilerplate and #includes)
+- 36 lines of _actual_ C code
+- free bonus: reap PIDs in the pod (no zombies!)
+
+.link https://github.com/kubernetes/kubernetes/blob/master/build/pause/pause.c See it yourself
+
+* The pause container visualized
+
+{ diagram of nested namespaces, cgroups, containers }
+
+* CNI - the Container Network Interface
+
+  specification and libraries for writing plugins to configure network interfaces in Linux containers,
+  along with a number of supported plugins.
+
+.link https://github.com/containernetworking/cni source
+
+.link http://blog.kubernetes.io/2016/01/why-Kubernetes-doesnt-use-libnetwork.html used by kubernetes
+
+Pretty much popular. Docker uses a different approach (libnetwork).
+But Docker may also use CNI too!
+
+* CNI in a nutshell:
+
+- Each plugin is actually one executable (!!)
+- Network defined using JSON - yet another syntax
+- Network configuration is not persisted - feed to plugin via stdin
+- Plugin arguments via environmental variables.
+- The CNI plugin is responsible to add the container to the network (wiring)
+- The CNI plugin is resposnible for *IP* *A*ddress *M*anagement (IPAM)
+
+A plugin may do either network or IPAM, or both
+
+* CNI plugins showcase
+
+Available plugins (on fedora 27, using stock rpm packages for CNI plugins):
+
+  # ls -lh /usr/libexec/cni/
+  total 34M
+  -rwxr-xr-x. 1 root root 2.9M Jan 23 19:03 bridge
+  -rwxr-xr-x. 1 root root 7.3M Jan 23 19:03 dhcp
+  -rwxr-xr-x. 1 root root 2.1M Jan 23 19:03 flannel
+  -rwxr-xr-x. 1 root root 2.2M Jan 23 19:03 host-local
+  -rwxr-xr-x. 1 root root 2.6M Jan 23 19:03 ipvlan
+  -rwxr-xr-x. 1 root root 2.2M Jan 23 19:03 loopback
+  -rwxr-xr-x. 1 root root 2.6M Jan 23 19:03 macvlan
+  -rwxr-xr-x. 1 root root 2.5M Jan 23 19:03 portmap
+  -rwxr-xr-x. 1 root root 2.9M Jan 23 19:03 ptp
+  -rwxr-xr-x. 1 root root 1.9M Jan 23 19:03 sample
+  -rwxr-xr-x. 1 root root 2.1M Jan 23 19:03 tuning
+  -rwxr-xr-x. 1 root root 2.6M Jan 23 19:03 vlan
+
+
+* The container spec
+
+A bare bones container spec
+
+  # cat container-config.json
+  {
+    "metadata": {
+        "name": "busybox"
+    },
+    "image":{
+        "image": "busybox"
+    },
+    "command": [
+        "top"
+    ],
+    "linux": {
+    }
+  }
+
+Will be consumed by `runc` - see next slides
+
+* container sharing is container caring
+
+Let's check how the namespace are set
+
+   cgroup -> cgroup:[4026531835]
+   ipc -> ipc:[4026532380]
+   -mnt -> mnt:[4026532378]
+   +mnt -> mnt:[4026532382]
+   net -> net:[4026532299]
+   -pid -> pid:[4026532381]
+   -pid_for_children -> pid:[4026532381]
+   +pid -> pid:[4026532383]
+   +pid_for_children -> pid:[4026532383]
+   user -> user:[4026531837]
+   uts -> uts:[4026532379]
+
+Containers share all namespaces but `mnt` and `pid*`
+
+* meet runC
+
+runC is the de facto standard to run containers
+many management engines (e.g. containerd) use the runC cli interface as ABI
+you can use any tool that implements the same CLI - but why bother? :\
+
+originated by Docker in the ~2014, now standalone project
+
+Includes a command line tool `runc` and a package `libcontainer` to run containers (surprise!)
+
+* how runC works (1/3)
+
+In a nutshell, it uses the building blocks we introduced before
+
+- containers defined by a spec (JSON document)
+- spec is pretty detailed (selinux, seccomp, capabilites, apparmor...)
+- assumes to be run in the root of a `bundle`
+- management engines like containerd takes care of setting everything (config files, directories) and then spawns runc
+- by default, leverages systemd for cgroups managemnt
+
+* how runC works (2/3)
+
+serverless: it spawns the container, actually the executable that was requested to run, and exits
+
+supervisor-less: you can use systemd directly (but most likely you shouldn't - lot of stuff to take care of) use a management tool instead!
+
+stateless: everything stored under /run
+
+* how runC works (3/3)
+
+Starting a container is actually surprisingly hard
+
+.link https://www.weave.works/blog/linux-namespaces-and-go-don-t-mix because linux namespaces and go don't mix
+
+runC solves lots of complexity and pitfalls
+
+more than enough for another talk on this topic only.
+
+* Some black magic
+
+runC does its job with a complex dance featuring:
+
+a two-stage fork
+
+calling itself while starting a container
+
+.link https://github.com/opencontainers/runc/blob/master/libcontainer/nsenter/README.md using helper code in C to be called before the golang runtime starts.
+
+the golang runtime multiplexes goroutines on threads
+
+threads can be spawned any time
+
+so it is unsafe to use setns(2) in go code: the goroutine environment can be corrupted without warning
+
+.link https://github.com/golang/go/issues/20676 it is a known issue
+
+.link https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion fork()ing in go code is not safe either
+
+* wrap-up/takeaways
+
+- pod doesn't really exist on your system, only as concept
+
+- a container is the execution of a given _image_
+
+- under the hood containers are agglomerates of cooperating features of the Linux Kernel
+
+- many of those features are quite old, and only recently they started to be integrated
+
+- lot of moving parts, *and* the environment is still evolving and changing
+
+- interoperability is improving (also thanks to kubernetes and CRI?)
+
+- a lot of integrated tools: you can plug in at pretty much ever layer
+
+* Q? A!
+
