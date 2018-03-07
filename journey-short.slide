@@ -15,9 +15,24 @@ http://github.com/{mojaves,fromanirh}
 - happy linux user (red hat linux, debian, ubuntu, fedora)
 - geek
 
+* Talk outline
+
+- part 1: intro & dramatis persona (you are here now!)
+
+- part 2: the building blocks of a container
+
+- part 3: how containers are run
+
+Slides & more @ https://github.com/mojaves/
+
+*STANDARD* *DISCLAIMER*
+I'm not a Kubernetes guru - mistakes may happen!
+Please let me know of any error you may find!
+
 * What to expect from this Talk?
 
 Goal: understand the steps that brings a container to life
+- What a container is? 
 - What a container runtime does do?
 - What is a container runtime, actually?
 
@@ -26,23 +41,11 @@ NON-Goals of this Talk:
 - how to build images: assume pre-built image
 - how to store and fetch images: assume image on local file system
 
-* Talk outline
-
-- part 1: intro & dramatis persona (you are here now!)
-
-- part 2: the building blocks of a container
-
-- part 3: how containers are built
-
-Slides & more @ https://github.com/mojaves/
-
-*STANDARD* *DISCLAIMER*
-I'm not a Kubernetes guru - mistakes may happen!
-Please let me know of any error you may find!
-
 * So, what is a container?
-What we commonly call a container is
-- a set of the features of the linux kernel we use
+
+- runs on Linux
+- is a Linux process (like bash, firefox, thunderbird...) but
+- augmented with a set of the features of the linux kernel
 - to (re)create a controlled process
 - to run a well-known image
 
@@ -59,6 +62,8 @@ Some well known names:
 * the building blocks of a container
 
 * Ingredients to bake containers
+
+We run on a Linux system, and we need:
 
 - namespaces: process isolation
 - cgroups: resource limits
@@ -134,30 +139,26 @@ Adds Mandatory Access Control (MAC) and Role Based Access Control (RBAC) to the 
 Linux, being UNIX-Like, previously supported only Discretionary Access Control
 Mostly used on CentOS, Fedora, RHEL, RHEL-derived distributions
 
-SELinux *used* to be *perceived* as overly complex, and overly annoying too.
-It got *EXTREMELY* better: most of time, you don't even notice it is running. Just Works (tm)
-
-If you need to troubleshoot something, `audit2why` is usally a great start
+Today, with good policies, it Just Works (tm)
 
 .link http://selinuxproject.org/page/Main_Page Lots of documentation available
 
-* how containers are built
+* how containers are run
 
 * Kubernetes
 
   Kubernetes is an open-source system for automating deployment,
   scaling, and management of containerized applications.
 
-.link https://kubernetes.io/ source
+.link https://kubernetes.io/ taken from here
+
+Implemented in golang
 
 Used to require Docker to actually run containers
 
 .link http://blog.kubernetes.io/2016/12/container-runtime-interface-cri-in-kubernetes.html Became runtime-agnostic since version 1.5
 
-A trail to follow: the kubernetes CRI api
-- kubernetes concepts are de facto more generic/reusable
-- docker is a silo
-- mapping to docker concepts is simple
+AKA: you can use something different from docker to actually run containers
 
 * Something about pods
 A pod is a group of containers run in a shared context
@@ -179,47 +180,15 @@ Makes sure that containers described by POD specifications are running and healt
 
 CRI API: Introduced in Kubernetes 1.5
 
-.image https://github.com/containerd/cri-containerd/raw/master/docs/cri-containerd.png _ 800
-
 Plugin interface which enables kubelet to use different container runtimes
 
-* Noteworthy CRI-compliant runtimes
+* The stack visualized
 
-.link https://github.com/kubernetes-incubator/cri-o cri-o: OCI Kubernetes Container Runtime daemon
+The containers stack is being modularized, also thanks to Kubernetes' CRI
 
-.link https://github.com/kubernetes-incubator/rktlet rtklet: rkt-based implementation of Kubernetes CRI
+And thanks to docker contributing projects and code to the greater community
 
-.link https://github.com/containerd/cri-containerd cri-containerd: containerd-based implementation of Kubernetes CRI.
-
-.link https://github.com/kubernetes/frakti frakti: lets Kubernetes run pods and containers directly inside hypervisors via runV
-
-* The CRI interface API
-
-.link https://github.com/kubernetes/kubernetes/blob/master/pkg/kubelet/apis/cri/runtime/v1alpha2/api.proto from the protocol spec:
-
-  service RuntimeService {
-    // Sandbox operations.
-    rpc RunPodSandbox(RunPodSandboxRequest) returns (RunPodSandboxResponse) {}
-    rpc PodSandboxStatus(PodSandboxStatusRequest) returns (PodSandboxStatusResponse) {}
-    rpc ListPodSandbox(ListPodSandboxRequest) returns (ListPodSandboxResponse) {}
-    ...
-    // Container operations.
-    rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
-    rpc StartContainer(StartContainerRequest) returns (StartContainerResponse) {}
-    rpc ListContainers(ListContainersRequest) returns (ListContainersResponse) {}
-    rpc ContainerStatus(ContainerStatusRequest) returns (ContainerStatusResponse) {}
-    ...
-  }
-
-* SPOILER: how it will look like
-
-  USER       PID %CPU %MEM    VSZ   RSS COMMAND
-  root      1436  0.0  0.3 854920 27176 /usr/local/bin/containerd
-  root      1823  0.0  0.0   8928  4184  \_ containerd-shim -namespace k8s.io ...
-  root      1839  0.0  0.0   1028     4      \_ /pause
-  root      2813  0.0  0.0   7520  4308  \_ containerd-shim -namespace k8s.io ...
-  root      2829  0.0  0.0   1240     4       \_ top
-  root      1446  0.0  0.2 398328 22364 /usr/local/bin/cri-containerd ...
+.image stack.png _ 800
 
 * Create workflow (aka: what to expect next)
 
@@ -239,17 +208,7 @@ That's the pause container!
 
 * Shared context
 
-   cgroup -> cgroup:[4026531835]
-   ipc -> ipc:[4026532380]
-   -mnt -> mnt:[4026532378]
-   +mnt -> mnt:[4026532382]
-   net -> net:[4026532299]
-   -pid -> pid:[4026532381]
-   -pid_for_children -> pid:[4026532381]
-   +pid -> pid:[4026532383]
-   +pid_for_children -> pid:[4026532383]
-   user -> user:[4026531837]
-   uts -> uts:[4026532379]
+.image nested.png _ 800
 
 Containers share all namespaces but `mnt` and `pid*`
 
@@ -261,10 +220,6 @@ Containers share all namespaces but `mnt` and `pid*`
 - free bonus: reap PIDs in the pod (no zombies!)
 
 .link https://github.com/kubernetes/kubernetes/blob/master/build/pause/pause.c See it yourself
-
-* The pause container visualized
-
-{ diagram of nested namespaces, cgroups, containers }
 
 * CNI - the Container Network Interface
 
@@ -308,37 +263,15 @@ Available plugins (on fedora 27, using stock rpm packages for CNI plugins):
   -rwxr-xr-x. 1 root root 2.1M Jan 23 19:03 tuning
   -rwxr-xr-x. 1 root root 2.6M Jan 23 19:03 vlan
 
-
-* The container spec
-
-A bare bones container spec
-
-  # cat container-config.json
-  {
-    "metadata": {
-        "name": "busybox"
-    },
-    "image":{
-        "image": "busybox"
-    },
-    "command": [
-        "top"
-    ],
-    "linux": {
-    }
-  }
-
-Will be consumed by `runc` - see next slides
-
 * meet runC
 
 runC is the de facto standard to run containers
-many management engines (e.g. containerd) use the runC cli interface as ABI
-you can use any tool that implements the same CLI - but why bother? :\
+
+command line tool
 
 originated by Docker in the ~2014, now standalone project
 
-Includes a command line tool `runc` and a package `libcontainer` to run containers (surprise!)
+Written in golang
 
 * how runC works (1/3)
 
