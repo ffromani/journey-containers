@@ -15,6 +15,10 @@ http://github.com/{mojaves,fromanirh}
 - happy linux user (red hat linux, debian, ubuntu, fedora)
 - geek
 
+*STANDARD* *DISCLAIMER*
+I'm not a Kubernetes guru - mistakes may happen!
+Please let me know of any error you may find!
+
 * Talk outline
 
 - part 1: intro & dramatis persona (you are here now!)
@@ -24,10 +28,6 @@ http://github.com/{mojaves,fromanirh}
 - part 3: how containers are run
 
 Slides & more @ https://github.com/mojaves/
-
-*STANDARD* *DISCLAIMER*
-I'm not a Kubernetes guru - mistakes may happen!
-Please let me know of any error you may find!
 
 * What to expect from this Talk?
 
@@ -269,9 +269,9 @@ runC is the de facto standard to run containers
 
 command line tool
 
-originated by Docker in the ~2014, now standalone project
-
 Written in golang
+
+originated by Docker in the ~2014, now standalone project
 
 * how runC works (1/3)
 
@@ -323,9 +323,7 @@ so it is unsafe to use setns(2) in go code: the goroutine environment can be cor
 
 * wrap-up/takeaways
 
-- pod doesn't really exist on your system, only as concept
-
-- a container is the execution of a given _image_
+- containers and pods doesn't really exist on your system, only as concept
 
 - under the hood containers are agglomerates of cooperating features of the Linux Kernel
 
@@ -338,3 +336,7 @@ so it is unsafe to use setns(2) in go code: the goroutine environment can be cor
 - a lot of integrated tools: you can plug in at pretty much ever layer
 
 * Q? A!
+
+Questions?
+
+Slides & more @ https://github.com/mojaves/
